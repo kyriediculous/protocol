@@ -880,7 +880,6 @@ contract("BondingManager", accounts => {
             await bondingManager.bond(1000, delegator, {from: delegator2})
 
             await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound + 1)
-            await fixture.roundsManager.execute(bondingManager.address, functionSig("setActiveTranscoders()"))
             await fixture.roundsManager.execute(bondingManager.address, functionSig("setCurrentRoundTotalActiveStake()"))
         })
 
@@ -1467,7 +1466,6 @@ contract("BondingManager", accounts => {
             await bondingManager.transcoder(5, 10, {from: transcoder1})
 
             await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound + 1)
-            await fixture.roundsManager.execute(bondingManager.address, functionSig("setActiveTranscoders()"))
             await fixture.ticketBroker.execute(
                 bondingManager.address,
                 functionEncodedABI(
@@ -1503,44 +1501,6 @@ contract("BondingManager", accounts => {
             const dInfo = await bondingManager.getDelegator(transcoder0)
             assert.equal(dInfo[5], currentRound + 1, "should set caller's lastClaimRound")
             assert.equal(dInfo[1], 0, "should set caller's fees to zero")
-        })
-    })
-
-    describe("setActiveTranscoders", () => {
-        const transcoder0 = accounts[0]
-        const transcoder1 = accounts[1]
-        const currentRound = 100
-
-        beforeEach(async () => {
-            await fixture.roundsManager.setMockBool(functionSig("currentRoundInitialized()"), true)
-            await fixture.roundsManager.setMockBool(functionSig("currentRoundLocked()"), false)
-            await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound)
-
-            await bondingManager.bond(1000, transcoder0, {from: transcoder0})
-            await bondingManager.transcoder(5, 10, {from: transcoder0})
-            await bondingManager.bond(1000, transcoder1, {from: transcoder1})
-            await bondingManager.transcoder(5, 10, {from: transcoder1})
-
-            await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound + 1)
-        })
-
-        it("should fail if system is paused", async () => {
-            await fixture.controller.pause()
-
-            await expectThrow(fixture.roundsManager.execute(bondingManager.address, functionSig("setActiveTranscoders()")))
-        })
-
-        it("should fail if caller is not RoundsManager", async () => {
-            await expectThrow(bondingManager.setActiveTranscoders())
-        })
-
-        it("should set the active transcoder set for the current round", async () => {
-            await fixture.roundsManager.execute(bondingManager.address, functionSig("setActiveTranscoders()"))
-            await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound+1)
-            assert.isOk(await bondingManager.isActiveTranscoder(transcoder0), "should set transcoder as active for current round")
-            assert.isOk(await bondingManager.isActiveTranscoder(transcoder1), "should set transcoder as active for current round")
-
-            assert.equal(await bondingManager.nextRoundTotalActiveStake(), 2000, "should set total active stake to sum of total stake of all active transcoders")
         })
     })
 
@@ -1679,7 +1639,6 @@ contract("BondingManager", accounts => {
             await bondingManager.transcoder(5, 10, {from: transcoder})
 
             await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound + 1)
-            await fixture.roundsManager.execute(bondingManager.address, functionSig("setActiveTranscoders()"))
             await fixture.roundsManager.execute(bondingManager.address, functionSig("setCurrentRoundTotalActiveStake()"))
         })
 

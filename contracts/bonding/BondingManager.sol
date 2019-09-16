@@ -87,8 +87,8 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         uint256 totalStake;
     }
 
-    // Keep track of active transcoder set for each round
-    mapping (uint256 => ActiveTranscoderSet) public activeTranscoderSet;
+    // DEPRECATED - DO NOT USE
+    mapping (uint256 => ActiveTranscoderSet) public activeTranscoderSetDEPRECATED;
 
     // The total active stake (sum of the stake of active set members) for the current round
     uint256 public currentRoundTotalActiveStake;
@@ -402,32 +402,6 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         minter().trustedWithdrawETH(msg.sender, amount);
 
         emit WithdrawFees(msg.sender);
-    }
-
-    /**
-     * @dev Set active transcoder set for the current round
-     */
-    function setActiveTranscoders() external whenSystemNotPaused onlyRoundsManager {
-        uint256 currentRound = roundsManager().currentRound();
-        uint256 activeSetSize = transcoderPool.getSize();
-
-        uint256 totalStake = 0;
-        address currentTranscoder = transcoderPool.getFirst();
-
-        for (uint256 i = 0; i < activeSetSize; i++) {
-            activeTranscoderSet[currentRound].transcoders.push(currentTranscoder);
-            activeTranscoderSet[currentRound].isActive[currentTranscoder] = true;
-
-            uint256 stake = transcoderTotalStake(currentTranscoder);
-
-            totalStake = totalStake.add(stake);
-
-            // Get next transcoder in the pool
-            currentTranscoder = transcoderPool.getNext(currentTranscoder);
-        }
-
-        // Update total stake of all active transcoders
-        activeTranscoderSet[currentRound].totalStake = totalStake;
     }
 
     /**
