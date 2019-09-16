@@ -81,14 +81,14 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
     SortedDoublyLL.Data private transcoderPool;
 
     // Represents the active transcoder set
-    struct ActiveTranscoderSet {
+    struct ActiveTranscoderSetDEPRECATED {
         address[] transcoders;
         mapping (address => bool) isActive;
         uint256 totalStake;
     }
 
     // DEPRECATED - DO NOT USE
-    mapping (uint256 => ActiveTranscoderSet) public activeTranscoderSetDEPRECATED;
+    mapping (uint256 => ActiveTranscoderSetDEPRECATED) public activeTranscoderSetDEPRECATED;
 
     // The total active stake (sum of the stake of active set members) for the current round
     uint256 public currentRoundTotalActiveStake;
