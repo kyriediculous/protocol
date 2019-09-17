@@ -162,17 +162,15 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         whenSystemNotPaused
         currentRoundInitialized
     {
-        require(MathUtils.validPerc(_rewardCut), "invalid rewardCut percentage");
-        require(MathUtils.validPerc(_feeShare), "invalid feeShare percentage");
-        require(isRegisteredTranscoder(msg.sender), "transcoder must be registered");
-
         require(
             !roundsManager().currentRoundLocked(),
             "can't update transcoder params, current round is locked"
         );
+        require(MathUtils.validPerc(_rewardCut), "invalid rewardCut percentage");
+        require(MathUtils.validPerc(_feeShare), "invalid feeShare percentage");
+        require(isRegisteredTranscoder(msg.sender), "transcoder must be registered");
 
         Transcoder storage t = transcoders[msg.sender];
-        Delegator storage del = delegators[msg.sender];
         uint256 currentRound = roundsManager().currentRound();
 
         require(
@@ -184,7 +182,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         t.feeShare = _feeShare;
 
         if (!transcoderPool.contains(msg.sender)) {
-            tryToJoinActiveSet(msg.sender, del.delegatedAmount, currentRound.add(1));
+            tryToJoinActiveSet(msg.sender, delegators[msg.sender].delegatedAmount, currentRound.add(1));
         }
 
         emit TranscoderUpdate(msg.sender, _rewardCut, _feeShare, transcoderPool.contains(msg.sender));
@@ -262,14 +260,11 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         currentRoundInitialized
         autoClaimEarnings
     {
-        // Caller must be in bonded state
         require(delegatorStatus(msg.sender) == DelegatorStatus.Bonded, "caller must be bonded");
 
         Delegator storage del = delegators[msg.sender];
 
-        // Amount must be greater than 0
-        require(_amount > 0, "unbonding amount must be greater than 0");
-        // Amount to unbond must be less than or equal to current bonded amount 
+        require(_amount > 0, "unbond amount must be greater than 0");
         require(_amount <= del.bondedAmount, "amount is greater than bonded amount");
 
         address currentDelegate = del.delegateAddress;
@@ -284,16 +279,20 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         });
         // Increment ID for next unbonding lock
         del.nextUnbondingLockId = unbondingLockId.add(1);
+
+        bool wasRegistered = isRegisteredTranscoder(msg.sender);
         // Decrease delegator's bonded amount
         del.bondedAmount = del.bondedAmount.sub(_amount);
 
-        if (currentDelegate != msg.sender || del.bondedAmount > 0) {
-            decreaseTotalStake(currentDelegate, _amount);
-        } else {
+        if (wasRegistered && !isRegisteredTranscoder(msg.sender)) {
+            // Resign if msg.sender was registered, but is no longer registered after decreasing del.bondedAmount
             resignTranscoder(msg.sender);
-            // Decrease delegate's delegated amount
-            delegators[currentDelegate].delegatedAmount = delegators[currentDelegate].delegatedAmount.sub(_amount);
-        }   
+        }
+
+        // If msg.sender was resigned this statement will decrease delegators[currentDelegate].delegatedAmount
+        // but it will not execute any of the active set stake updates since the conditional that checks
+        // for a registered transcoder will evaluate to false
+        decreaseTotalStake(currentDelegate, _amount);
 
         // Check if delegator has a zero bonded amount
         // If so, update its delegation status
@@ -496,7 +495,9 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
             uint256 penalty = MathUtils.percOf(delegators[_transcoder].bondedAmount, _slashAmount);
 
             // If registered transcoder, resign it
-            resignTranscoder(_transcoder);
+            if (isRegisteredTranscoder(_transcoder)) {
+                resignTranscoder(_transcoder);
+            }
 
             // Decrease bonded stake
             del.bondedAmount = del.bondedAmount.sub(penalty);
@@ -878,7 +879,6 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
             // Evict the least stake transcoder from the active set for the next round
             transcoderPool.remove(lastTranscoder);
             transcoders[lastTranscoder].activationRound = 0;
-            transcoders[lastTranscoder].earningsPoolPerRound[_activationRound].setStake(0);
             pendingNextRoundTotalActiveStake = pendingNextRoundTotalActiveStake.sub(lastStake);
 
             emit TranscoderEvicted(lastTranscoder);
@@ -897,11 +897,8 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
      * @dev Remove transcoder
      */
     function resignTranscoder(address _transcoder) internal {
-        uint256 transcoderStake = transcoderTotalStake(_transcoder);
-        uint256 currentRound = roundsManager().currentRound();
         transcoderPool.remove(_transcoder);
-        nextRoundTotalActiveStake = nextRoundTotalActiveStake.sub(transcoderStake);
-        transcoders[_transcoder].earningsPoolPerRound[currentRound].setStake(0);
+        nextRoundTotalActiveStake = nextRoundTotalActiveStake.sub(transcoderTotalStake(_transcoder));
         transcoders[_transcoder].activationRound = 0;
         emit TranscoderResigned(_transcoder);
     }
