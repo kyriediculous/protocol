@@ -24,7 +24,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
 
     // Time between unbonding and possible withdrawl in rounds
     uint64 public unbondingPeriod;
-    // Number of active transcoders
+    // DEPRECATED - DO NOT USE
     uint256 public numActiveTranscodersDEPRECATED;
     // Max number of rounds that a caller can claim earnings for at once
     uint256 public maxEarningsClaimsRounds;
@@ -39,7 +39,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         uint256 pendingFeeShareDEPRECATED;                              // DEPRECATED - DO NOT USE
         uint256 pendingPricePerSegmentDEPRECATED;                       // DEPRECATED - DO NOT USE
         mapping (uint256 => EarningsPool.Data) earningsPoolPerRound;    // Mapping of round => earnings pool for the round
-        uint256 lastActiveStakeUpdateRound;                             // Round for which the stake was last updated
+        uint256 lastActiveStakeUpdateRound;                             // Round for which the stake was last updated while the transcoder is active
         uint256 activationRound;                                        // Round in which the transcoder became active - 0 if inactive
     }
 
@@ -80,7 +80,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
     // Candidate and reserve transcoders
     SortedDoublyLL.Data private transcoderPool;
 
-    // Represents the active transcoder set
+    // DEPRECATED - DO NOT USE
     struct ActiveTranscoderSetDEPRECATED {
         address[] transcoders;
         mapping (address => bool) isActive;
