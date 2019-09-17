@@ -174,6 +174,11 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
             "can't update transcoder params, current round is locked"
         );
 
+        require(
+            !isActiveTranscoder(msg.sender) || t.lastRewardRound == roundsManager().currentRound(),
+            "caller can't be active or must have already called reward for the current round"
+        );
+
         // Reward cut must be a valid percentage
         require(MathUtils.validPerc(_rewardCut));
         // Fee share must be a valid percentage

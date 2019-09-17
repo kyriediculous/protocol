@@ -267,6 +267,26 @@ contract("BondingManager", accounts => {
                 assert.equal(tInfo[2], 15, "wrong feeShare")
             })
         })
+
+        describe("transcoder is active", () => {
+            beforeEach(async () => {
+                await bondingManager.bond(1000, accounts[0])
+                await bondingManager.transcoder(5, 10)
+                await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound + 1)
+            })
+
+            it("fails if transcoder has not called reward for the current round", async () => {
+                await expectRevertWithReason(bondingManager.transcoder(10, 20), "caller can't be active or must have already called reward for the current round")
+            })
+
+            it("sets rewardCut and feeShare if transcoder has already called reward in the current round", async () => {
+                await bondingManager.reward()
+                await bondingManager.transcoder(10, 20)
+                const transcoder = await bondingManager.getTranscoder(accounts[0])
+                assert.equal(transcoder.rewardCut, 10, "wrong rewardCut")
+                assert.equal(transcoder.feeShare, 20, "wrong feeShare")
+            })
+        })
     })
 
     describe("bond", () => {
