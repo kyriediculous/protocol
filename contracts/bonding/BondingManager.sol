@@ -174,8 +174,10 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
             "can't update transcoder params, current round is locked"
         );
 
+        uint256 currentRound = roundsManager().currentRound();
+
         require(
-            !isActiveTranscoder(msg.sender) || t.lastRewardRound == roundsManager().currentRound(),
+            !isActiveTranscoder(msg.sender) || t.lastRewardRound == currentRound,
             "caller can't be active or must have already called reward for the current round"
         );
 
@@ -191,7 +193,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         t.feeShare = _feeShare;
 
         if (!transcoderPool.contains(msg.sender)) {
-            tryToJoinActiveSet(msg.sender, del.delegatedAmount, roundsManager().currentRound());
+            tryToJoinActiveSet(msg.sender, del.delegatedAmount, currentRound.add(1));
         }
 
         emit TranscoderUpdate(msg.sender, _rewardCut, _feeShare, transcoderPool.contains(msg.sender));
@@ -429,6 +431,10 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         t.lastRewardRound = currentRound;
         earningsPool.setCommission(t.rewardCut, t.feeShare);
 
+        // If transcoder didn't receive stake updates during the previous round and hasn't called reward for > 1 round
+        // the 'totalStake' and 'claimableStake' on its 'EarningsPool' for the current round wouldn't be initialized
+        // Thus we sync the the transcoder's stake to when it was last updated
+        // 'updateTrancoderFees()' will set the update round to 'currentRound +1' so this synchronization shouldn't occur frequently
         uint256 lastUpdateRound = lastActiveStakeUpdateRound(msg.sender);
         if (lastUpdateRound < currentRound) {
             earningsPool.setStake(activeTranscoderTotalStake(msg.sender, lastUpdateRound));
@@ -463,6 +469,8 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
 
         EarningsPool.Data storage earningsPool = t.earningsPoolPerRound[_round];
 
+        // if transcoder hasn't called 'reward()' for '_round' its 'transcoderFeeShare' and 'transcoderRewardCut'
+        // on the 'EarningsPool' for '_round' would not be initiated and the fee distribution wouldn't happen as expected
         if (_round > t.lastRewardRound) {
             earningsPool.setCommission(
                 t.rewardCut,
@@ -811,6 +819,11 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         return delegators[_delegator].unbondingLocks[_unbondingLockId].withdrawRound > 0;
     }
 
+    /**
+     * @dev Increase the total stake for a transcoder and updates its 'lastActiveStakeUpdateRound'
+     * @param _transcoder The transcoder to increase the stake for
+     * @param _amount The amount to increase the stake for '_transcoder' by
+     */
     function increaseTotalStake(address _transcoder, uint256 _amount) internal {
         if (isRegisteredTranscoder(_transcoder)) {
             uint256 newStake = transcoderTotalStake(_transcoder).add(_amount);
@@ -826,7 +839,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
                 t.lastActiveStakeUpdateRound = nextRound;
             } else {
                 // Check if the transcoder is eligible to join the active set in the update round
-                tryToJoinActiveSet(_transcoder, newStake, currentRound);
+                tryToJoinActiveSet(_transcoder, newStake, nextRound);
             }
         }
 
@@ -834,6 +847,11 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         delegators[_transcoder].delegatedAmount = delegators[_transcoder].delegatedAmount.add(_amount);
     }
 
+    /**
+     * @dev Decrease the total stake for a transcoder and updates its 'lastActiveStakeUpdateRound'
+     * @param _transcoder The transcoder to decrease the stake for
+     * @param _amount The amount to decrease the stake for '_transcoder' by
+     */
     function decreaseTotalStake(address _transcoder, uint256 _amount) internal {
         if (isRegisteredTranscoder(_transcoder)) {
             if (!transcoderPool.contains(_transcoder)) {
@@ -854,8 +872,13 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         delegators[_transcoder].delegatedAmount = delegators[_transcoder].delegatedAmount.sub(_amount);
     }
 
-    function tryToJoinActiveSet(address _transcoder, uint256 _totalStake, uint256 _currentRound) internal {
-        uint256 nextRound = _currentRound.add(1);
+    /**
+     * @dev Tries to add a transcoder to active transcoder pool, evicts the active transcoder with the lowest stake if the pool is full
+     * @param _transcoder The transcoder to insert into the transcoder pool
+     * @param _totalStake The total stake for '_transcoder'
+     * @param _activationRound The round in which the transcoder should become active
+     */
+    function tryToJoinActiveSet(address _transcoder, uint256 _totalStake, uint256 _activationRound) internal {
         uint256 pendingNextRoundTotalActiveStake = nextRoundTotalActiveStake;
 
         if (transcoderPool.isFull()) {
@@ -871,7 +894,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
             // Evict the least stake transcoder from the active set for the next round
             transcoderPool.remove(lastTranscoder);
             transcoders[lastTranscoder].activationRound = 0;
-            transcoders[lastTranscoder].earningsPoolPerRound[nextRound].setStake(0);
+            transcoders[lastTranscoder].earningsPoolPerRound[_activationRound].setStake(0);
             pendingNextRoundTotalActiveStake = pendingNextRoundTotalActiveStake.sub(lastStake);
 
             emit TranscoderEvicted(lastTranscoder);
@@ -880,9 +903,9 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         transcoderPool.insert(_transcoder, _totalStake, address(0), address(0));
         pendingNextRoundTotalActiveStake = pendingNextRoundTotalActiveStake.add(_totalStake);
         Transcoder storage t = transcoders[_transcoder];
-        t.lastActiveStakeUpdateRound = nextRound;
-        t.activationRound = nextRound;
-        t.earningsPoolPerRound[nextRound].setStake(_totalStake);
+        t.lastActiveStakeUpdateRound = _activationRound;
+        t.activationRound = _activationRound;
+        t.earningsPoolPerRound[_activationRound].setStake(_totalStake);
         nextRoundTotalActiveStake = pendingNextRoundTotalActiveStake;
     }
 
