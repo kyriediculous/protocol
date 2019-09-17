@@ -43,6 +43,9 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         uint256 activationRound;                                        // Round in which the transcoder became active - 0 if inactive
     }
 
+    // The various states a transcoder can be in
+    enum TranscoderStatus { NotRegistered, Registered }
+
     // Represents a delegator's current state
     struct Delegator {
         uint256 bondedAmount;                    // The amount of bonded tokens
@@ -284,7 +287,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         // Decrease delegator's bonded amount
         del.bondedAmount = del.bondedAmount.sub(_amount);
 
-        if (wasRegistered && !isRegisteredTranscoder(msg.sender) && transcoderPoolContains(msg.sender)) {
+        if (wasRegistered && !isRegisteredTranscoder(msg.sender) && transcoderPool.contains(msg.sender)) {
             // Resign if msg.sender was registered, but is no longer registered after decreasing del.bondedAmount
             resignTranscoder(msg.sender);
         }
@@ -621,6 +624,15 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         return delegators[_transcoder].delegatedAmount;
     }
 
+    /*
+     * @dev Computes transcoder status
+     * @param _transcoder Address of transcoder
+     */
+    function transcoderStatus(address _transcoder) public view returns (TranscoderStatus) {
+        if (isRegisteredTranscoder(_transcoder)) return TranscoderStatus.Registered;
+        return TranscoderStatus.NotRegistered;
+    }
+
     /**
      * @dev Computes delegator status
      * @param _delegator Address of delegator
@@ -828,7 +840,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         }
 
         // Increase delegate's delegated amount
-        delegators[_transcoder].delegatedAmount = delegators[_transcoder].delegatedAmount.add(_amount);
+        delegators[_delegate].delegatedAmount = delegators[_delegate].delegatedAmount.add(_amount);
     }
 
     /**
@@ -837,7 +849,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
      * @param _amount The amount to decrease the stake for '_delegate' by
      */
     function decreaseTotalStake(address _delegate, uint256 _amount) internal {
-        if (!transcoderPool.contains(_delegate)) {
+        if (transcoderPool.contains(_delegate)) {
             uint256 newStake = transcoderTotalStake(_delegate).sub(_amount);
             uint256 nextRound = roundsManager().currentRound().add(1);
 
@@ -909,10 +921,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
      * @param _round Round that transcoder is updated
      */
     function updateTranscoderWithRewards(address _transcoder, uint256 _rewards, uint256 _round) internal {
-        Transcoder storage t = transcoders[_transcoder];
-        Delegator storage del = delegators[_transcoder];
-
-        EarningsPool.Data storage earningsPool = t.earningsPoolPerRound[_round];
+        EarningsPool.Data storage earningsPool = transcoders[_transcoder].earningsPoolPerRound[_round];
         // Add rewards to reward pool
         earningsPool.addToRewardPool(_rewards);
         // Update transcoder's total stake with rewards
