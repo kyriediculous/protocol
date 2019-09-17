@@ -239,7 +239,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
             // Update amount to delegate with previous delegation amount
             delegationAmount = delegationAmount.add(del.bondedAmount);
 
-            decreaseTranscoderTotalStake(currentDelegate, del.bondedAmount);
+            decreaseTotalStake(currentDelegate, del.bondedAmount);
         }
 
         // Delegation amount must be > 0 - cannot delegate to someone without having bonded stake
@@ -295,7 +295,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         del.bondedAmount = del.bondedAmount.sub(_amount);
 
         if (currentDelegate != msg.sender || del.bondedAmount > 0) {
-            decreaseTranscoderTotalStake(currentDelegate, _amount);
+            decreaseTotalStake(currentDelegate, _amount);
         } else {
             resignTranscoder(msg.sender);
             // Decrease delegate's delegated amount
@@ -834,7 +834,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         delegators[_transcoder].delegatedAmount = delegators[_transcoder].delegatedAmount.add(_amount);
     }
 
-    function decreaseTranscoderTotalStake(address _transcoder, uint256 _amount) internal {
+    function decreaseTotalStake(address _transcoder, uint256 _amount) internal {
         if (isRegisteredTranscoder(_transcoder)) {
             if (!transcoderPool.contains(_transcoder)) {
                 return;
