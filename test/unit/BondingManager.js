@@ -108,16 +108,16 @@ contract("BondingManager", accounts => {
         })
 
         it("should fail if rewardCut is not a valid percentage <= 100%", async () => {
-            await expectThrow(bondingManager.transcoder(PERC_DIVISOR + 1, 10))
+            await expectRevertWithReason(bondingManager.transcoder(PERC_DIVISOR + 1, 10), "invalid rewardCut percentage")
         })
 
         it("should fail if feeShare is not a valid percentage <= 100%", async () => {
-            await expectThrow(bondingManager.transcoder(5, PERC_DIVISOR + 1))
+            await expectRevertWithReason(bondingManager.transcoder(5, PERC_DIVISOR + 1), "invalid feeShare percentage")
         })
 
         describe("transcoder is not already registered", () => {
             it("should fail if caller is not delegated to self with a non-zero bonded amount", async () => {
-                await expectThrow(bondingManager.transcoder(5, 10))
+                await expectRevertWithReason(bondingManager.transcoder(5, 10), "transcoder must be registered")
             })
 
             it("should set transcoder's pending rewardCut and feeShare", async () => {
@@ -441,7 +441,7 @@ contract("BondingManager", accounts => {
 
                 it("should update transcoder's lastActiveStakeUpdateRound", async () => {
                     await bondingManager.bond(3000, transcoder0, {from: delegator})
-                    assert.equal(await bondingManager.lastActiveStakeUpdateRound(transcoder0), currentRound+1)
+                    assert.equal((await bondingManager.getTranscoder(transcoder0)).lastActiveStakeUpdateRound, currentRound+1)
                 })
             })
 
@@ -463,7 +463,7 @@ contract("BondingManager", accounts => {
 
                 it("should not update transcoder's lastActiveStakeUpdateRound", async () => {
                     await bondingManager.bond(3000, nonTranscoder, {from: delegator})
-                    assert.equal(await bondingManager.lastActiveStakeUpdateRound(nonTranscoder), 0)
+                    assert.equal((await bondingManager.getTranscoder(transcoder)).nonTranscoder, 0)
                 })
             })
         })
@@ -517,8 +517,8 @@ contract("BondingManager", accounts => {
 
                         it("should update old delegate and new delegate's lastActiveStakeUpdateRound", async () => {
                             await bondingManager.bond(0, transcoder1, {from: delegator})
-                            assert.equal(await bondingManager.lastActiveStakeUpdateRound(transcoder0), currentRound+1)
-                            assert.equal(await bondingManager.lastActiveStakeUpdateRound(transcoder1), currentRound+1)
+                            assert.equal((await bondingManager.getTranscoder(transcoder0)).lastActiveStakeUpdateRound, currentRound+1)
+                            assert.equal((await bondingManager.getTranscoder(transcoder1)).lastActiveStakeUpdateRound, currentRound+1)
                         })
                     })
 
@@ -539,8 +539,8 @@ contract("BondingManager", accounts => {
 
                         it("should only update old delegate's lastActiveStakeUpdateRound", async () => {
                             await bondingManager.bond(0, nonTranscoder, {from: delegator})
-                            assert.equal(await bondingManager.lastActiveStakeUpdateRound(transcoder0), currentRound +1)
-                            assert.equal(await bondingManager.lastActiveStakeUpdateRound(nonTranscoder), 0)
+                            assert.equal((await bondingManager.getTranscoder(transcoder0)).lastActiveStakeUpdateRound, currentRound +1)
+                            assert.equal((await bondingManager.getTranscoder(nonTranscoder)).lastActiveStakeUpdateRound, 0)
                         })
                     })
                 })
@@ -566,8 +566,8 @@ contract("BondingManager", accounts => {
 
                         it("should only update new delegate lastActiveStakeUpdateRound", async () => {
                             await bondingManager.bond(0, transcoder0, {from: delegator})
-                            assert.equal(await bondingManager.lastActiveStakeUpdateRound(transcoder0), currentRound+1)
-                            assert.equal(await bondingManager.lastActiveStakeUpdateRound(delegator2), 0)
+                            assert.equal((await bondingManager.getTranscoder(transcoder0)).lastActiveStakeUpdateRound, currentRound+1)
+                            assert.equal((await bondingManager.getTranscoder(delegator2)).lastActiveStakeUpdateRound, 0)
                         })
                     })
 
@@ -580,7 +580,7 @@ contract("BondingManager", accounts => {
 
                         it("should not update new delegate's lastActiveStakeUpdateRound", async () => {
                             await bondingManager.bond(0, nonTranscoder, {from: delegator})
-                            assert.equal(await bondingManager.lastActiveStakeUpdateRound(nonTranscoder), 0)
+                            assert.equal((await bondingManager.getTranscoder(nonTranscoder)).lastActiveStakeUpdateRound, 0)
                         })
                     })
                 })
@@ -977,7 +977,7 @@ contract("BondingManager", accounts => {
 
                 it("should not change delegate's lastActiveStakeUpdateRound", async () => {
                     await bondingManager.unbond(500, {from: delegator2})
-                    assert.equal(await bondingManager.lastActiveStakeUpdateRound(delegator), 0)
+                    assert.equal((await bondingManager.getTranscoder(delegator)).lastActiveStakeUpdateRound, 0)
                 })
             })
 
@@ -1006,7 +1006,7 @@ contract("BondingManager", accounts => {
 
                 it("should update delegate's lastActiveStakeUpdateRound", async () => {
                     await bondingManager.unbond(500, {from: delegator})
-                    assert.equal(await bondingManager.lastActiveStakeUpdateRound(transcoder), currentRound+2)
+                    assert.equal((await bondingManager.getTranscoder(transcoder)).lastActiveStakeUpdateRound, currentRound+2)
                 })
             })
 
@@ -1035,7 +1035,7 @@ contract("BondingManager", accounts => {
 
                 it("should update delegate's lastActiveStakeUpdateRound", async () => {
                     await bondingManager.unbond(500, {from: delegator})
-                    assert.equal(await bondingManager.lastActiveStakeUpdateRound(transcoder), currentRound+2)
+                    assert.equal((await bondingManager.getTranscoder(transcoder)).lastActiveStakeUpdateRound, currentRound+2)
                 })
             })
         })
@@ -1198,7 +1198,7 @@ contract("BondingManager", accounts => {
 
             it("should update delegate's lastActiveStakeUpdateRound", async () => {
                 await bondingManager.rebond(unbondingLockID, {from: delegator})
-                assert.equal(await bondingManager.lastActiveStakeUpdateRound(transcoder), currentRound+2)
+                assert.equal((await bondingManager.getTranscoder(transcoder)).lastActiveStakeUpdateRound, currentRound+2)
             })
 
             it("should evict when rebonding and pool is full", async () => {
@@ -1241,7 +1241,7 @@ contract("BondingManager", accounts => {
 
             it("should not update delegate's lastActiveStakeUpdateRound", async () => {
                 await bondingManager.rebond(unbondingLockID, {from: delegator})
-                assert.equal(await bondingManager.lastActiveStakeUpdateRound(nonTranscoder), 0)
+                assert.equal((await bondingManager.getTranscoder(nonTranscoder)).lastActiveStakeUpdateRound, 0)
             })
         })
 
@@ -1359,7 +1359,7 @@ contract("BondingManager", accounts => {
 
             it("should update delegate's lastActiveStakeUpdateRound", async () => {
                 await bondingManager.rebondFromUnbonded(transcoder, unbondingLockID, {from: delegator})
-                assert.equal(await bondingManager.lastActiveStakeUpdateRound(transcoder), currentRound+2)
+                assert.equal((await bondingManager.getTranscoder(transcoder)).lastActiveStakeUpdateRound, currentRound+2)
             })
         })
 
@@ -1386,7 +1386,7 @@ contract("BondingManager", accounts => {
 
             it("should not update delegate's lastActiveStakeUpdateRound", async () => {
                 await bondingManager.rebondFromUnbonded(nonTranscoder, unbondingLockID, {from: delegator})
-                assert.equal(await bondingManager.lastActiveStakeUpdateRound(nonTranscoder), 0)
+                assert.equal((await bondingManager.getTranscoder(nonTranscoder)).lastActiveStakeUpdateRound, 0)
             })
         })
 

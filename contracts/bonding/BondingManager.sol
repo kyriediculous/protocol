@@ -43,9 +43,6 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         uint256 activationRound;                                        // Round in which the transcoder became active - 0 if inactive
     }
 
-    // The various states a transcoder can be in
-    enum TranscoderStatus { NotRegistered, Registered }
-
     // Represents a delegator's current state
     struct Delegator {
         uint256 bondedAmount;                    // The amount of bonded tokens
@@ -165,29 +162,23 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         whenSystemNotPaused
         currentRoundInitialized
     {
-        Transcoder storage t = transcoders[msg.sender];
-        Delegator storage del = delegators[msg.sender];
+        require(MathUtils.validPerc(_rewardCut), "invalid rewardCut percentage");
+        require(MathUtils.validPerc(_feeShare), "invalid feeShare percentage");
+        require(isRegisteredTranscoder(msg.sender), "transcoder must be registered");
 
-        // No transcoder operations can take place during the round lock period
         require(
             !roundsManager().currentRoundLocked(),
             "can't update transcoder params, current round is locked"
         );
 
+        Transcoder storage t = transcoders[msg.sender];
+        Delegator storage del = delegators[msg.sender];
         uint256 currentRound = roundsManager().currentRound();
 
         require(
             !isActiveTranscoder(msg.sender) || t.lastRewardRound == currentRound,
             "caller can't be active or must have already called reward for the current round"
         );
-
-        // Reward cut must be a valid percentage
-        require(MathUtils.validPerc(_rewardCut));
-        // Fee share must be a valid percentage
-        require(MathUtils.validPerc(_feeShare));
-
-        // Must have a non-zero amount bonded to self
-        require(del.delegateAddress == msg.sender && del.bondedAmount > 0);
 
         t.rewardCut = _rewardCut;
         t.feeShare = _feeShare;
@@ -435,7 +426,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         // the 'totalStake' and 'claimableStake' on its 'EarningsPool' for the current round wouldn't be initialized
         // Thus we sync the the transcoder's stake to when it was last updated
         // 'updateTrancoderFees()' will set the update round to 'currentRound +1' so this synchronization shouldn't occur frequently
-        uint256 lastUpdateRound = lastActiveStakeUpdateRound(msg.sender);
+        uint256 lastUpdateRound = t.lastActiveStakeUpdateRound;
         if (lastUpdateRound < currentRound) {
             earningsPool.setStake(activeTranscoderTotalStake(msg.sender, lastUpdateRound));
         }
@@ -660,13 +651,14 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
     )
         public
         view
-        returns (uint256 lastRewardRound, uint256 rewardCut, uint256 feeShare, uint256 activationRound)
+        returns (uint256 lastRewardRound, uint256 rewardCut, uint256 feeShare, uint256 lastActiveStakeUpdateRound, uint256 activationRound)
     {
         Transcoder storage t = transcoders[_transcoder];
 
         lastRewardRound = t.lastRewardRound;
         rewardCut = t.rewardCut;
         feeShare = t.feeShare;
+        lastActiveStakeUpdateRound = t.lastActiveStakeUpdateRound;
         activationRound = t.activationRound;
     }
 
@@ -781,14 +773,6 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         }
 
         return totalBonded;
-    }
-
-    /**
-     * @dev Return the round for which a transcoder's stake was last updated
-     * @param _transcoder Transcoder address
-     */
-    function lastActiveStakeUpdateRound(address _transcoder) public view returns (uint256) {
-        return transcoders[_transcoder].lastActiveStakeUpdateRound;
     }
 
    /**
@@ -916,7 +900,6 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         uint256 transcoderStake = transcoderTotalStake(_transcoder);
         uint256 currentRound = roundsManager().currentRound();
         transcoderPool.remove(_transcoder);
-        currentRoundTotalActiveStake = currentRoundTotalActiveStake.sub(transcoderStake);
         nextRoundTotalActiveStake = nextRoundTotalActiveStake.sub(transcoderStake);
         transcoders[_transcoder].earningsPoolPerRound[currentRound].setStake(0);
         transcoders[_transcoder].activationRound = 0;
