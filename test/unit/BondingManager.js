@@ -1577,6 +1577,24 @@ contract("BondingManager", accounts => {
             assert.equal(endTotalStake.sub(startTotalStake), 1000, "should update transcoder's total stake in the pool with new rewards")
             assert.equal(endTotalBonded.sub(startTotalBonded), 1000, "should update total bonded with new rewards")
         })
+
+        it("should update caller with rewards if lastActiveStakeUdpateRound < currentRound", async () => {
+            await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound + 3)
+            const startDelegatedAmount = (await bondingManager.getDelegator(transcoder))[3]
+            const startTotalStake = await bondingManager.transcoderTotalStake(transcoder)
+            const startTotalBonded = await bondingManager.getTotalBonded()
+            await bondingManager.reward({from: transcoder})
+            const endDelegatedAmount = (await bondingManager.getDelegator(transcoder))[3]
+            const endTotalStake = await bondingManager.transcoderTotalStake(transcoder)
+            const endTotalBonded = await bondingManager.getTotalBonded()
+
+            const earningsPool = await bondingManager.getTranscoderEarningsPoolForRound(transcoder, currentRound + 3)
+            assert.equal(earningsPool[0], 1000, "should update rewards in earnings pool for current round")
+
+            assert.equal(endDelegatedAmount.sub(startDelegatedAmount), 1000, "should update delegatedAmount with new rewards")
+            assert.equal(endTotalStake.sub(startTotalStake), 1000, "should update transcoder's total stake in the pool with new rewards")
+            assert.equal(endTotalBonded.sub(startTotalBonded), 1000, "should update total bonded with new rewards")
+        })
     })
 
     describe("updateTranscoderWithFees", () => {
