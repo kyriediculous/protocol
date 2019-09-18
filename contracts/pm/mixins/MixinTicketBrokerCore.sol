@@ -61,6 +61,182 @@ contract MixinTicketBrokerCore is MContractRegistry, MReserve, MTicketProcessor,
         _;
     }
 
+     /**
+     * @dev Adds ETH to the caller's deposit
+     */
+    function fundDeposit()
+        external
+        payable
+        whenSystemNotPaused
+        processDeposit(msg.sender, msg.value)
+    {
+        processFunding(msg.value);
+    }
+
+    /**
+     * @dev Adds ETH to the caller's reserve
+     */
+    function fundReserve()
+        external
+        payable
+        whenSystemNotPaused
+        processReserve(msg.sender, msg.value)
+    {
+        processFunding(msg.value);
+    }
+
+    /**
+     * @dev Adds ETH to the caller's deposit and reserve
+     * @param _depositAmount Amount of ETH to add to the caller's deposit
+     * @param _reserveAmount Amount of ETH to add to the caller's reserve
+     */
+    function fundDepositAndReserve(
+        uint256 _depositAmount,
+        uint256 _reserveAmount
+    )
+        external
+        payable
+        whenSystemNotPaused
+        checkDepositReserveETHValueSplit(_depositAmount, _reserveAmount)
+        processDeposit(msg.sender, _depositAmount)
+        processReserve(msg.sender, _reserveAmount)
+    {
+        processFunding(msg.value);
+    }
+
+    /**
+     * @dev Redeems a winning ticket that has been signed by a sender and reveals the
+     * recipient recipientRand that corresponds to the recipientRandHash included in the ticket
+     * @param _ticket Winning ticket to be redeemed in order to claim payment
+     * @param _sig Sender's signature over the hash of `_ticket`
+     * @param _recipientRand The preimage for the recipientRandHash included in `_ticket`
+     */
+    function redeemWinningTicket(
+        Ticket memory _ticket,
+        bytes _sig,
+        uint256 _recipientRand
+    )
+        public
+        currentRoundInitialized
+        whenSystemNotPaused
+    {
+        bytes32 ticketHash = getTicketHash(_ticket);
+
+        // Require a valid winning ticket for redemption
+        requireValidWinningTicket(_ticket, ticketHash, _sig, _recipientRand);
+
+        Sender storage sender = senders[_ticket.sender];
+
+        // Require sender to be locked
+        require(
+            isLocked(sender),
+            "sender is unlocked"
+        );
+        // Require either a non-zero deposit or non-zero reserve for the sender
+        require(
+            sender.deposit > 0 || remainingReserve(_ticket.sender) > 0,
+            "sender deposit and reserve are zero"
+        );
+
+        // Mark ticket as used to prevent replay attacks involving redeeming
+        // the same winning ticket multiple times
+        usedTickets[ticketHash] = true;
+
+        uint256 amountToTransfer = 0;
+
+        if (_ticket.faceValue > sender.deposit) {
+            // If ticket face value > sender's deposit then claim from
+            // the sender's reserve
+
+            amountToTransfer = sender.deposit.add(claimFromReserve(
+                _ticket.sender,
+                _ticket.recipient,
+                _ticket.faceValue.sub(sender.deposit)
+            ));
+
+            sender.deposit = 0;
+        } else {
+            // If ticket face value <= sender's deposit then only deduct
+            // from sender's deposit
+
+            amountToTransfer = _ticket.faceValue;
+            sender.deposit = sender.deposit.sub(_ticket.faceValue);
+        }
+
+        if (amountToTransfer > 0) {
+            winningTicketTransfer(_ticket.recipient, amountToTransfer, _ticket.auxData);
+
+            emit WinningTicketTransfer(_ticket.sender, _ticket.recipient, amountToTransfer);
+        }
+
+        emit WinningTicketRedeemed(
+            _ticket.sender,
+            _ticket.recipient,
+            _ticket.faceValue,
+            _ticket.winProb,
+            _ticket.senderNonce,
+            _recipientRand,
+            _ticket.auxData
+        );
+    }
+
+    /**
+     * @dev Initiates the unlock period for the caller
+     */
+    function unlock() public whenSystemNotPaused {
+        Sender storage sender = senders[msg.sender];
+
+        require(
+            sender.deposit > 0 || remainingReserve(msg.sender) > 0,
+            "sender deposit and reserve are zero"
+        );
+        require(!_isUnlockInProgress(sender), "unlock already initiated");
+
+        uint256 currentRound = roundsManager().currentRound();
+        sender.withdrawRound = currentRound.add(unlockPeriod);
+
+        emit Unlock(msg.sender, currentRound, sender.withdrawRound);
+    }
+
+    /**
+     * @dev Cancels the unlock period for the caller
+     */
+    function cancelUnlock() public whenSystemNotPaused {
+        Sender storage sender = senders[msg.sender];
+
+        _cancelUnlock(sender, msg.sender);
+    }
+
+    /**
+     * @dev Withdraws all ETH from the caller's deposit and reserve
+     */
+    function withdraw() public whenSystemNotPaused {
+        Sender storage sender = senders[msg.sender];
+
+        uint256 deposit = sender.deposit;
+        uint256 reserve = remainingReserve(msg.sender);
+
+        require(
+            deposit > 0 || reserve > 0,
+            "sender deposit and reserve are zero"
+        );
+        require(
+            _isUnlockInProgress(sender),
+            "no unlock request in progress"
+        );
+        require(
+            !isLocked(sender),
+            "account is locked"
+        );
+
+        sender.deposit = 0;
+        clearReserve(msg.sender);
+
+        withdrawTransfer(msg.sender, deposit.add(reserve));
+
+        emit Withdrawal(msg.sender, deposit, reserve);
+    }
+
     /**
      * @dev Returns whether a sender is currently in the unlock period
      * @param _sender Address of sender
