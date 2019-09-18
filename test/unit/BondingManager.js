@@ -1841,6 +1841,20 @@ contract("BondingManager", accounts => {
             assert.equal((await bondingManager.getDelegator(delegator1))[5], currentRound + 1, "should update caller's lastClaimRound to the current round")
         })
 
+        it("fires a ClaimEarnings event", async () => {
+            const expRewards = new BN(delegatorRewards * .3) // 30%
+            const expFees = new BN(delegatorFees * .3) // 30%
+            bondingManager.EarningsClaimed({from: delegator1}).on("data", e => {
+                assert.equal(e.returnValues.delegator == delegator1, "delegate is not correct")
+                assert.equal(e.returnValues.delegate == transcoder, "wrong delegator")
+                assert.equal(e.returnValues.fees == expFees, "amount of fees claimed is not correct")
+                assert.equal(e.returnValues.rewards == expRewards, "amount of rewards claimed is not correct")
+                assert.equal(e.returnValues.startRound == currentRound +1, "wrong start round")
+                assert.equal(e.returnValues.endRound == currentRound +1, "wrong end round")
+            })
+            await bondingManager.claimEarnings(currentRound + 1, {from: delegator1})
+        })
+
         describe("caller has a delegate", () => {
             it("should fail if endRound - lastClaimRound > maxEarningsClaimsRounds (too many rounds to claim through)", async () => {
                 const maxEarningsClaimsRounds = await bondingManager.maxEarningsClaimsRounds.call()

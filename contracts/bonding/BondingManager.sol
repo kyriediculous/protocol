@@ -1029,12 +1029,13 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
             // we know they will require too much gas to loop through all the necessary rounds to claim earnings
             // The user should instead manually invoke `claimEarnings` to split up the claiming process
             // across multiple transactions
-            require(_endRound.sub(del.lastClaimRound) <= maxEarningsClaimsRounds);
+            uint256 lastClaimRound = del.lastClaimRound;
+            require(_endRound.sub(lastClaimRound) <= maxEarningsClaimsRounds);
 
             uint256 currentBondedAmount = del.bondedAmount;
             uint256 currentFees = del.fees;
 
-            for (uint256 i = del.lastClaimRound + 1; i <= _endRound; i++) {
+            for (uint256 i = lastClaimRound + 1; i <= _endRound; i++) {
                 EarningsPool.Data storage earningsPool = transcoders[del.delegateAddress].earningsPoolPerRound[i];
 
                 if (earningsPool.hasClaimableShares()) {
@@ -1047,9 +1048,19 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
                 }
             }
 
+            emit EarningsClaimed(
+                _delegator,
+                del.delegateAddress,
+                currentFees.sub(del.fees),
+                currentBondedAmount.sub(del.bondedAmount),
+                lastClaimRound + 1,
+                _endRound
+            );
+
             // Rewards are bonded by default
             del.bondedAmount = currentBondedAmount;
             del.fees = currentFees;
+
         }
 
         del.lastClaimRound = _endRound;
