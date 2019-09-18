@@ -295,7 +295,7 @@ contract("TicketBroker", accounts => {
             const reserve = 1000
             await fixture.controller.pause()
             await expectRevertWithReason(
-                broker.fundDepositAndReserve(deposit, reserve, {from: sender, value: 1000}), 
+                broker.fundDepositAndReserve(deposit, reserve, {from: sender, value: 1000}),
                 "system is paused"
             )
         })
@@ -448,11 +448,11 @@ contract("TicketBroker", accounts => {
             const faceValue = deposit
             const ticket = createWinningTicket(recipient, sender, recipientRand, faceValue)
             const senderSig = await web3.eth.sign(getTicketHash(ticket), sender)
-            
+
             await fixture.controller.pause()
 
             await expectRevertWithReason(
-                broker.redeemWinningTicket(ticket, senderSig, recipientRand, {from: recipient}), 
+                broker.redeemWinningTicket(ticket, senderSig, recipientRand, {from: recipient}),
                 "system is paused"
             )
         })
@@ -470,7 +470,7 @@ contract("TicketBroker", accounts => {
             await fixture.roundsManager.setMockBool(functionSig("currentRoundInitialized()"), false)
 
             await expectRevertWithReason(
-                broker.redeemWinningTicket(ticket, senderSig, recipientRand, {from: recipient}), 
+                broker.redeemWinningTicket(ticket, senderSig, recipientRand, {from: recipient}),
                 "current round is not initialized"
             )
         })
@@ -1537,7 +1537,7 @@ contract("TicketBroker", accounts => {
             await fixture.controller.pause()
             await expectRevertWithReason(broker.withdraw(), "system is paused")
         })
-        
+
         it("reverts when both deposit and reserve are zero", async () => {
             await expectRevertWithReason(broker.withdraw(), "sender deposit and reserve are zero")
         })

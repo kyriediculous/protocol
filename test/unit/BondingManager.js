@@ -3,7 +3,7 @@ import expectThrow from "../helpers/expectThrow"
 import {contractId, functionSig, functionEncodedABI} from "../../utils/helpers"
 import {constants} from "../../utils/constants"
 import BN from "bn.js"
-import { expectRevertWithReason } from "../helpers/expectFail"
+import {expectRevertWithReason} from "../helpers/expectFail"
 
 const BondingManager = artifacts.require("BondingManager")
 
