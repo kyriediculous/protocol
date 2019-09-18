@@ -190,9 +190,8 @@ contract("BondingManager", accounts => {
                         const expTotalBonded = totalBonded - 1000 + 6000
                         assert.equal(await bondingManager.getTotalBonded(), expTotalBonded, "wrong total bonded")
 
-                        assert.isTrue(await bondingManager.isActiveTranscoder(newTranscoder), "caller should be registered as transocder")
+                        assert.isTrue(await bondingManager.isActiveTranscoder(newTranscoder), "caller should be active as transocder")
                         assert.equal(await bondingManager.getTranscoderPoolSize(), 2, "wrong transcoder pool size")
-                        assert.equal(await bondingManager.getTranscoderPoolMaxSize(), 2, "wrong transcoder pool max size")
                         assert.equal(await bondingManager.transcoderTotalStake(newTranscoder), 6000, "wrong transcoder total stake")
                         assert.isFalse(await bondingManager.isActiveTranscoder(accounts[0]), "transcoder with least delegated stake should be evicted")
                     })
@@ -368,9 +367,7 @@ contract("BondingManager", accounts => {
                 // evict transcoder0 from the pool
                 await bondingManager.bond(2000, transcoder2, {from: delegator})
                 const poolT2 = await bondingManager.getTranscoderEarningsPoolForRound(transcoder2, currentRound+2)
-                const poolT0 = await bondingManager.getTranscoderEarningsPoolForRound(transcoder0, currentRound+2)
                 assert.equal(poolT2.totalStake, 2500)
-                assert.equal(poolT0.totalStake, 0)
             })
         })
 
@@ -524,7 +521,6 @@ contract("BondingManager", accounts => {
                         it("should not update new delegate's position in transcoder pool", async () => {
                             await bondingManager.bond(0, nonTranscoder, {from: delegator})
                             await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound + 1)
-                            // New delegate was not previously first transcoder in pool and now is
                             assert.isFalse(await bondingManager.isActiveTranscoder(nonTranscoder))
                         })
 
@@ -1578,7 +1574,7 @@ contract("BondingManager", accounts => {
             assert.equal(endTotalBonded.sub(startTotalBonded), 1000, "should update total bonded with new rewards")
         })
 
-        it("should update caller with rewards if lastActiveStakeUdpateRound < currentRound", async () => {
+        it("should update caller with rewards if lastActiveStakeUpdateRound < currentRound", async () => {
             await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound + 3)
             const startDelegatedAmount = (await bondingManager.getDelegator(transcoder))[3]
             const startTotalStake = await bondingManager.transcoderTotalStake(transcoder)
@@ -2296,8 +2292,6 @@ contract("BondingManager", accounts => {
             )
             await fixture.minter.setMockUint256(functionSig("createReward(uint256,uint256)"), 1000)
             await bondingManager.reward({from: transcoder})
-            // because we call reward after updateTranscoderWithFees earningsPool.hasTranscoderRewardFeePool will be false
-            // and fees will not be divided up, how can we ensure this value is true at the beginning of a round for the current earningsPool?
 
             await fixture.roundsManager.setMockUint256(functionSig("currentRound()"), currentRound + 2)
             await fixture.ticketBroker.execute(

@@ -282,29 +282,24 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
         });
         // Increment ID for next unbonding lock
         del.nextUnbondingLockId = unbondingLockId.add(1);
-
-        bool wasRegistered = isRegisteredTranscoder(msg.sender);
         // Decrease delegator's bonded amount
         del.bondedAmount = del.bondedAmount.sub(_amount);
 
-        if (wasRegistered && !isRegisteredTranscoder(msg.sender) && transcoderPool.contains(msg.sender)) {
-            // Resign if msg.sender was registered, but is no longer registered after decreasing del.bondedAmount
-            resignTranscoder(msg.sender);
+        if (del.bondedAmount == 0) {
+            // Delegator no longer delegated to anyone if it does not have a bonded amount
+            del.delegateAddress = address(0);
+            // Delegator does not have a start round if it is no longer delegated to anyone
+            del.startRound = 0;
+
+            if (transcoderPool.contains(msg.sender)) {
+                resignTranscoder(msg.sender);
+            }
         }
 
         // If msg.sender was resigned this statement will decrease delegators[currentDelegate].delegatedAmount
         // but it will not execute any of the active set stake updates since the conditional that checks
         // for a registered transcoder will evaluate to false
         decreaseTotalStake(currentDelegate, _amount);
-
-        // Check if delegator has a zero bonded amount
-        // If so, update its delegation status
-        if (del.bondedAmount == 0) {
-            // Delegator no longer delegated to anyone if it does not have a bonded amount
-            del.delegateAddress = address(0);
-            // Delegator does not have a start round if it is no longer delegated to anyone
-            del.startRound = 0;
-        } 
 
         emit Unbond(currentDelegate, msg.sender, unbondingLockId, _amount, withdrawRound);
     }
@@ -498,7 +493,7 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
             uint256 penalty = MathUtils.percOf(delegators[_transcoder].bondedAmount, _slashAmount);
 
             // If registered transcoder, resign it
-            if (isRegisteredTranscoder(_transcoder) && transcoderPool.contains(_transcoder)) {
+            if (transcoderPool.contains(_transcoder)) {
                 resignTranscoder(_transcoder);
             }
 
@@ -886,6 +881,8 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
             // Evict the least stake transcoder from the active set for the next round
             // Not zeroing 'Transcoder.lastActiveStakeUpdateRound' saves gas (5k when transcoder is evicted and 20k when transcoder is reinserted)
             // There should be no side-effects as long as the value is properly updated on stake updates
+            // Not-zeroing the stake on the current round's 'EarningsPool' saves gas and should have no side effects as long as
+            // 'EarningsPool.setStake()' is called whenever a transcoder becomes active again.
             transcoderPool.remove(lastTranscoder);
             transcoders[lastTranscoder].activationRound = 0;
             pendingNextRoundTotalActiveStake = pendingNextRoundTotalActiveStake.sub(lastStake);
@@ -908,6 +905,8 @@ contract BondingManager is ManagerProxyTarget, IBondingManager {
     function resignTranscoder(address _transcoder) internal {
         // Not zeroing 'Transcoder.lastActiveStakeUpdateRound' saves gas (5k when transcoder is evicted and 20k when transcoder is reinserted)
         // There should be no side-effects as long as the value is properly updated on stake updates
+        // Not-zeroing the stake on the current round's 'EarningsPool' saves gas and should have no side effects as long as
+        // 'EarningsPool.setStake()' is called whenever a transcoder becomes active again.
         transcoderPool.remove(_transcoder);
         nextRoundTotalActiveStake = nextRoundTotalActiveStake.sub(transcoderTotalStake(_transcoder));
         transcoders[_transcoder].activationRound = 0;
